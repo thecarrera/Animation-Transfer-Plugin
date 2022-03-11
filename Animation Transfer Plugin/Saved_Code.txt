@@ -1,0 +1,70 @@
+	####################################################################
+	####															####
+	####					Qt Widget -> shelf						####
+	####	TODO: Manually add new shelf and Tool icon in c++		####
+	####															####
+	####################################################################
+	
+	//
+	//	USE MPxToolCommand and MPxContext
+	//
+
+
+	QWidget* windowWidget { MQtUtil::mainWindow() };
+	QObject* windowObject { windowWidget };
+	
+	//Fetch Custom Shelf
+	QObject* targetChild { windowObject->children()[6]->children()[2]->children()[4]->children()[1]->
+		children()[1]->children()[0]->children()[1]->children()[1]->children()[1]->children()[2]->
+		children()[1]->children()[0]->children()[4]};
+	
+	QWidget* customShelfWidget{ qobject_cast<QWidget*>(targetChild->children()[9]) };
+	
+	// Should fetch widget type, crasches in Maya >>>
+	//QMetaObject metaTarget { targetChild->children()[9]->metaObject() };
+	//MGlobal::displayInfo(metaTarget.className());
+	// <<< 
+
+	std::unique_ptr<QLayout> customShelfLayout{ new QLayout(customShelfWidget->layout()) };
+	try { this->myWidget.get()->setLayout(customShelfLayout);}
+	catch (std::exception e) { MGlobal::displayInfo("crap"); MGlobal::displayInfo(e.what()); }
+	QStackedWidget* shelfTabs {qobject_cast<QStackedWidget*>(targetChild)};
+	try { shelfTabs->addWidget(myWidget.get()); }
+	catch (std::exception e) { MGlobal::displayInfo(e.what()); };
+
+	debug = MQtUtil::fullName(windowObject->children()[6]->children()[2]->children()[4]->children()[1]->
+		children()[1]->children()[0]->children()[1]->children()[1]->children()[1]->children()[2]->
+		children()[1]->children()[0]->children()[4]);
+	MGlobal::displayInfo(debug);
+	print_widget_tree(*targetChild, 0);
+
+	####################################
+	####							####
+	####							####
+	####	Print Shelves in MEL	####
+	####							####
+	####################################
+
+	global string $gShelfTopLevel;
+	string $shelves[] = `tabLayout -q -childArray $gShelfTopLevel`;
+	for($i in $shelves) {
+			print $i;
+			print "\n";
+	}
+
+	############################################
+	####									####
+	####									####
+	####	Return value from MEL to C++	####
+	####									####
+	############################################
+
+	MString command {R"V0G0N(
+		proc string testFunc()
+		{
+			string $test = \"testing\";
+			return $test;
+		}
+		testFunc();
+	)V0G0N"};
+	MGlobal::displayInfo(command);
