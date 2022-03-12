@@ -42,6 +42,7 @@
 #include <QtCore/qobject.h>
 #include <QtCore/qmetaobject.h>
 #include <QtCore/QVariant>
+#include <QtCore/qpointer.h>
 
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QLabel>
@@ -270,6 +271,8 @@ public:
 UIWindowController* uiController{ new UIWindowController };
 MString thisAnimPath {};
 QWidget* uiWidget {new QWidget};
+
+//QPointer pointer;
 class TransferCmd : public MPxCommand
 {
 public:
