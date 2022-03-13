@@ -28,8 +28,10 @@ public:
 	static void* creator() { return new TransferCmd; }
 	static void cleanUp();
 
-	static const QString functionName;
-	static QString path;
+	static QString			pluginPath;
+	static const QString	functionName;
+	static const QString	buttonName;
+	static QString			buttonObjectName;
 	static QPointer<UIWindowController> uiController;
 };
 QPointer<UIWindowController> TransferCmd::uiController;
