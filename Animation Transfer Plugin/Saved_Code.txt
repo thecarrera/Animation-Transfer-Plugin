@@ -58,13 +58,15 @@
 	####	Return value from MEL to C++	####
 	####									####
 	############################################
+	
+	#include <maya/MCommandResult.h>
 
-	MString command {R"V0G0N(
-		proc string testFunc()
-		{
-			string $test = \"testing\";
-			return $test;
-		}
-		testFunc();
-	)V0G0N"};
-	MGlobal::displayInfo(command);
+	MString command{R"V0G0N(
+	proc string something(){
+		return "testing";
+	}
+	test();
+	)V0G0N"	};
+	MCommandResult result {};
+	MGlobal::executeCommand(command, result);
+	MGlobal::displayInfo(result.stringResult());

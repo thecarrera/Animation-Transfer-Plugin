@@ -9,6 +9,7 @@
 
 #include <maya/MObject.h>
 #include <maya/MFnDependencyNode.h>
+#include <maya/MFnIkJoint.h>
 
 //////////////////////////////
 //			 Qt 			//
@@ -272,14 +273,17 @@ void UIWindowController::retranslateUi(QWidget* Transfer_Window)
 
 void UIWindowController::selectTarget()
 {
-	MSelectionList selectionList {};
-	MGlobal::getActiveSelectionList(selectionList);
-
-	for (auto i {0}; i < selectionList.length(); ++i)
-	{
-		MObject currentObject {};
-		selectionList.getDependNode(i, currentObject);
-		MFnDependencyNode currentNode {currentObject};
-		MGlobal::displayInfo(currentNode.name().asChar());
-	}
+	//MSelectionList selectionList {};
+	//MGlobal::getActiveSelectionList(selectionList);
+	//
+	//for (auto i {0}; i < selectionList.length(); ++i)
+	//{
+	//	MObject currentObject {};
+	//	selectionList.getDependNode(i, currentObject);
+	//	MFnDependencyNode currentNode {currentObject};
+	//	MGlobal::displayInfo(currentNode.name().asChar());
+	//	MGlobal::displayInfo(currentNode.object().apiTypeStr());
+	//	
+	//
+	//}
 }
