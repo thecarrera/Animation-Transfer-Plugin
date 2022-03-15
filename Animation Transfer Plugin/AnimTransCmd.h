@@ -28,8 +28,10 @@ public:
 	static void* creator() { return new TransferCmd; }
 	static void cleanUp();
 
-	static const QString functionName;
-	static QString path;
+	static QString			pluginPath;
+	static const QString	functionName;
+	static const QString	buttonName;
+	static QString			buttonObjectName;
 	static QPointer<UIWindowController> uiController;
 };
 QPointer<UIWindowController> TransferCmd::uiController;
@@ -40,7 +42,7 @@ MStatus TransferCmd::doIt(const MArgList&)
 	{
 		uiController = new UIWindowController;
 		uiController.data()->setWindowFlags(Qt::WindowStaysOnTopHint);
-		uiController.data()->show();
+		uiController.data()->show();		
 	}
 	else {
 		uiController.data()->showNormal();
@@ -53,7 +55,8 @@ MStatus TransferCmd::doIt(const MArgList&)
 void TransferCmd::cleanUp() {
 	if (!uiController.isNull())
 	{
-		uiController.data()->cleanUp();
+		uiController->close();
+		uiController->cleanUp();
 		delete uiController;
 	}
 }
