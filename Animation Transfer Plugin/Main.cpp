@@ -116,8 +116,6 @@ void deleteShelf()
 	MGlobal::executeCommand(command);
 }
 
-
-
 EXPORT MStatus initializePlugin(MObject obj) {
 	MStatus res{ MS::kFailure };
 	MFnPlugin pluginHandle{ obj, "Animation Transfer", "1.0", "Any", &res };

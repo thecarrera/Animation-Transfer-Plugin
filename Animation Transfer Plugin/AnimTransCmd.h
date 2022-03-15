@@ -42,7 +42,7 @@ MStatus TransferCmd::doIt(const MArgList&)
 	{
 		uiController = new UIWindowController;
 		uiController.data()->setWindowFlags(Qt::WindowStaysOnTopHint);
-		uiController.data()->show();
+		uiController.data()->show();		
 	}
 	else {
 		uiController.data()->showNormal();
@@ -55,7 +55,8 @@ MStatus TransferCmd::doIt(const MArgList&)
 void TransferCmd::cleanUp() {
 	if (!uiController.isNull())
 	{
-		uiController.data()->cleanUp();
+		uiController->close();
+		uiController->cleanUp();
 		delete uiController;
 	}
 }
