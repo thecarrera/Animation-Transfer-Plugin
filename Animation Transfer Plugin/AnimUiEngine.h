@@ -86,6 +86,7 @@ private:
 	static void selection(SELTYPE type);
 
 	static void upInList(SELTYPE type);
+	static MObject lastChildforDeletion(MFnDagNode& dag);
 	static void deleteItemInList(SELTYPE type);
 	static void downInList(SELTYPE type);
 
@@ -574,6 +575,17 @@ void UIWindowController::upInList(SELTYPE type) {
 		MGlobal::selectByName(list->currentItem()->text().toStdString().c_str());
 	}
 }
+MObject UIWindowController::lastChildforDeletion(MFnDagNode& dag)
+{
+	MObject childObj{};
+	if (dag.childCount() > 0)
+	{
+		MFnDagNode childDag{ dag.child(dag.childCount() - 1) };
+		childObj = lastChildforDeletion(childDag);
+		if (childObj.isNull()) return childDag.object();
+	}
+	return childObj;
+}
 void UIWindowController::deleteItemInList(SELTYPE type)
 {
 	QPointer<QListWidget> list {};
@@ -601,39 +613,53 @@ void UIWindowController::deleteItemInList(SELTYPE type)
 	{
 		MGlobal::clearSelectionList();
 		MGlobal::selectByName(label->text().toStdString().c_str());
-		MGlobal::displayInfo(label->text().toStdString().c_str());
 		MGlobal::getActiveSelectionList(selectionList);
-		selectionList.getDependNode(0, selObject);
-		MFnDagNode currentDag {selObject};
-		MString command {"delete " + MString(currentDag.name())};
-		if (selectionList.length() > 0) MGlobal::executeCommand(command); label->setText("");
+		if (selectionList.length() > 0)
+		{
+			selectionList.getDependNode(0, selObject);
+			MFnDagNode currentDag{ selObject };
+			MString command{ "delete " + MString(currentDag.name()) };
+			MGlobal::executeCommand(command); label->setText("");
+		}
 	}
 	else
 	{
-		int currentRow {};
-		currentRow = list->currentRow();
-		while (list->count() > currentRow) list->takeItem(list->count());
-		currentItem = list->takeItem(list->currentRow());
+		int currentRow { list->currentRow() };
 		MGlobal::clearSelectionList();
-		MGlobal::selectByName(MString(currentItem->text().toStdString().c_str()));
-
+		MGlobal::selectByName(MString(list->item(currentRow)->text().toStdString().c_str()));
 		MGlobal::getActiveSelectionList(selectionList);
-		selectionList.getDependNode(0, selObject);
-		MFnDagNode currentDag{ selObject };
-		MString command{ "delete " + MString(currentDag.name()) };
-		if(selectionList.length() > 0) MGlobal::executeCommand(command);
-		
-		MGlobal::clearSelectionList();
-		if (list->selectedItems().length() >= 1) {
-			QListWidgetItem* currentItem = list->item(list->currentRow());
-			MGlobal::selectByName(MString(currentItem->text().toStdString().c_str()));
-		}
-		else if(label->text().length() > 0)
+		if (selectionList.length() > 0)
 		{
-			MGlobal::selectByName(label->text().toStdString().c_str());
+			selectionList.getDependNode(0, selObject);
+			MFnDagNode currentDag{ selObject };
+			MObject lastChildObject {lastChildforDeletion(currentDag)};
+			if (lastChildObject.isNull()) 
+			{
+				MGlobal::displayInfo("Entered 1");
+				list->takeItem(currentRow);
+			}
+			else
+			{
+				MFnDagNode lastChild {lastChildObject};
+				int lastRow {};
+				int listIndex{ currentRow+1 };
+				while (!lastRow)
+					if (list->item(listIndex)->text().toStdString().c_str() == lastChild.name()) {
+						lastRow = listIndex;
+					}
+					else { ++listIndex; };
+				MGlobal::displayInfo(QString::number(listIndex).toStdString().c_str());
+				MGlobal::displayInfo(QString::number(lastRow).toStdString().c_str());
+				for (size_t i = lastRow; i >= currentRow; --i)
+				{
+					MGlobal::displayInfo(QString::number(i).toStdString().c_str());
+					list->takeItem(i);
+				}
+			}
+			MString command{ "delete " + MString(currentDag.name()) };
+			MGlobal::executeCommand(command);
 		}
 	}
-
 }
 void UIWindowController::downInList(SELTYPE type)
 {
