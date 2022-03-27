@@ -7,9 +7,10 @@
 //
 
 // Maya libs
-#pragma comment(lib,"OpenMayaUI.lib")
 #pragma comment(lib,"Foundation.lib")
 #pragma comment(lib,"OpenMaya.lib")
+#pragma comment(lib,"OpenMayaUI.lib")
+#pragma comment(lib,"OpenMayaAnim.lib")
 
 //////////////////////////////
 //			STD 			//

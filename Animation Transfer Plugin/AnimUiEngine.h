@@ -9,8 +9,6 @@
 #include <maya/MSelectionList.h>
 #include <maya/MItSelectionList.h>
 
-#include <maya/MRenderUtil.h>
-
 #include <maya/MDagPath.h>
 
 #include <maya/MObject.h>
@@ -18,6 +16,23 @@
 #include <maya/MFnDependencyNode.h>
 #include <maya/MFnDagNode.h>
 #include <maya/MFnIkJoint.h>
+#include <maya/MItKeyframe.h>
+
+#include <maya/MAnimUtil.h>
+#include <maya/MAnimControl.h>
+#include <maya/MFnAnimCurve.h>
+#include <maya/MDataBlock.h>
+#include <maya/MDataHandle.h>
+#include <maya/MArrayDataHandle.h>
+#include <maya/MPlug.h>
+#include <maya/MPlugArray.h>
+#include <maya/MFnAttribute.h>
+#include <maya/MFnTypedAttribute.h>
+#include <maya/MFnEnumAttribute.h>
+#include <maya/MFnMatrixData.h>
+#include <maya/MMatrix.h>
+
+#include <maya/MFnNumericAttribute.h>
 
 //////////////////////////////
 //			 Qt 			//
@@ -46,7 +61,6 @@ public:
 	UIWindowController();
 	static void cleanUp() noexcept;
 	void closeEvent(QCloseEvent* event) override;
-
 
 private:
 	static QPointer<QWidget>		thisClass;
@@ -77,18 +91,37 @@ private:
 
 	static bool						Target_From_Sel;
 	static bool						Source_From_Sel;
+	static bool						retainRootPos;
 
-	static void retranslateUi(QWidget* Transfer_Window);
+	static void retranslateUi(QWidget* const);
 
-	static void addJointsToList(MFnDagNode& dag, QListWidget& List);
-	static bool peekChildren(MFnDagNode& dag, QPointer<QListWidget> list, QPointer<QLineEdit> input);
-	static MObject getTrueRoot(MFnDagNode& dag);
-	static void selection(SELTYPE type);
+	static void addJointsToList(MFnDagNode&, QListWidget&);
+	static bool peekChildren(MFnDagNode&, QPointer<QListWidget>, QPointer<QLineEdit>);
+	static MObject getTrueRoot(MFnDagNode&);
+	static void selection(const SELTYPE);
 
-	static void upInList(SELTYPE type);
-	static MObject lastChildforDeletion(MFnDagNode& dag);
-	static void deleteItemInList(SELTYPE type);
-	static void downInList(SELTYPE type);
+	static void upInList(const SELTYPE);
+	static MObject lastChildforDeletion(const MFnDagNode& const);
+	static void deleteItemInList(const SELTYPE);
+	static void downInList(const SELTYPE);
+
+	static std::unique_ptr<MPlugArray> getJointAttributePlugs(const MObject& const);
+	static std::unique_ptr<MPlugArray> getMatrixAttributePlugs(const MObject& const);
+	static std::unique_ptr<MPlugArray> getBindAttributePlugs(const MObject& const);
+	static MStatus setKeyframes(MPlug& const, const MPlug& const);
+	
+	//static MStatus setMatrix(MPlug&, MPlug&);
+	//static MStatus bindMatrixTransfer(MPlugArray& const, MPlugArray& const);
+	//static MStatus matrixTransfer(const MPlugArray& const, const MPlugArray& const);
+
+	static MStatus transferPlugArray(MArrayDataHandle& const, MArrayDataHandle& const);
+	static MStatus transferMatrix(MPlug& const, const MPlug& const);
+	static MStatus transferDouble3(MPlug& const, const MPlug& const);
+	static MStatus transferEnum(MPlug& const, const MPlug& const);
+	static MStatus transferPlugs(MPlugArray& const, MPlugArray& const);
+
+	static MStatus jointTransfer(const MObject& const, const MObject& const);
+	static void transferAnimation();
 
 	public slots:
 	static void selectTarget();
@@ -128,6 +161,7 @@ QPointer<QLabel>		UIWindowController::Source_Joints;
 QPointer<QLineEdit>		UIWindowController::Source_Input;
 bool					UIWindowController::Target_From_Sel {};
 bool					UIWindowController::Source_From_Sel {};
+bool					UIWindowController::retainRootPos {};
 
 UIWindowController::UIWindowController(){
 	if (this->objectName().isEmpty())
@@ -286,7 +320,7 @@ UIWindowController::UIWindowController(){
 	this->connect(Source_Up, &QPushButton::clicked, this, &UIWindowController::upSourceList);
 	this->connect(Source_Delete, &QPushButton::clicked, this, &UIWindowController::deleteSourceListItem);
 	this->connect(Source_Down, &QPushButton::clicked, this, &UIWindowController::downSourceList);
-
+	this->connect(Transfer_Button, &QPushButton::clicked, this, &UIWindowController::transferAnimation);
 
 
 	//////////////////////////////
@@ -319,7 +353,7 @@ UIWindowController::UIWindowController(){
 	//////////////////////////////
 	retranslateUi(this);
 }
-void UIWindowController::retranslateUi(QWidget* Transfer_Window)
+void UIWindowController::retranslateUi(QWidget* const Transfer_Window)
 {
 	Transfer_Window->setWindowTitle(QApplication::translate("Transfer_Window", "Transfer Animation", 0));
 	Transfer_Button->setText(QApplication::translate("Transfer_Window", "Transfer Animation", 0));
@@ -369,8 +403,6 @@ void UIWindowController::closeEvent(QCloseEvent* event) {
 	Source_List->clear();
 }
 
-
-
 void UIWindowController::addJointsToList(MFnDagNode& dag, QListWidget& List) {
 	for (size_t i = 0; i < dag.childCount(); ++i)
 	{
@@ -415,7 +447,7 @@ MObject UIWindowController::getTrueRoot(MFnDagNode& dag)
 	if (trueRootPath.apiType() != MFn::kJoint) trueRootPath = latestJoint;
 	return trueRootPath.node();
 }
-void UIWindowController::selection(SELTYPE type)
+void UIWindowController::selection(const SELTYPE type)
 {
 	MSelectionList selectionList{};
 	MGlobal::getActiveSelectionList(selectionList);
@@ -486,12 +518,12 @@ void UIWindowController::selection(SELTYPE type)
 		MFnDagNode childDag{ childNode.object() };
 		addJointsToList(childDag, *List);
 	}
-	if (Input->text() != "")
-		if(OppositeInput->text() != "")
+	if ((Input->text() != "" && OppositeInput->text() != "") &&
+		(List->count() != List->count()))
 			MGlobal::displayInfo("WARNNING: Count of joint lists are unequal! Adjusting to lowest count!");
 }
 
-void UIWindowController::upInList(SELTYPE type) {
+void UIWindowController::upInList(const SELTYPE type) {
 	QPointer<QListWidget> list {};
 	QPointer<QLineEdit> label {};
 	switch (type)
@@ -575,7 +607,7 @@ void UIWindowController::upInList(SELTYPE type) {
 		MGlobal::selectByName(list->currentItem()->text().toStdString().c_str());
 	}
 }
-MObject UIWindowController::lastChildforDeletion(MFnDagNode& dag)
+MObject UIWindowController::lastChildforDeletion(const MFnDagNode& const dag)
 {
 	MObject childObj{};
 	if (dag.childCount() > 0)
@@ -586,7 +618,7 @@ MObject UIWindowController::lastChildforDeletion(MFnDagNode& dag)
 	}
 	return childObj;
 }
-void UIWindowController::deleteItemInList(SELTYPE type)
+void UIWindowController::deleteItemInList(const SELTYPE type)
 {
 	QPointer<QListWidget> list {};
 	QPointer<QLineEdit> label {};
@@ -661,7 +693,7 @@ void UIWindowController::deleteItemInList(SELTYPE type)
 		}
 	}
 }
-void UIWindowController::downInList(SELTYPE type)
+void UIWindowController::downInList(const SELTYPE type)
 {
 	QPointer<QListWidget> list {};
 	switch (type)
@@ -740,6 +772,404 @@ void UIWindowController::downInList(SELTYPE type)
 		}
 		delete idialog;
 	}
+}
+
+std::unique_ptr<MPlugArray> UIWindowController::getJointAttributePlugs(const MObject& const obj) {
+	const MFnDependencyNode node{ obj };
+	std::unique_ptr<MPlugArray> plugs{new MPlugArray};
+	if (retainRootPos &&
+		(Source_Input->text().toStdString().c_str() != node.name() ||
+			Target_Input->text().toStdString().c_str() != node.name()))
+	{
+		return plugs;
+	}
+
+	//	119 translate				132 shear						144 scalePivot					156 transMinusRotatePivot 
+	//	120 translateX				133 shearXY						145 scalePivotX					157 transMinusRotatePivotX
+	//	121 translateY				134 shearXZ						146 scalePivotY					158 transMinusRotatePivotY
+	//	122 translateZ				135 shearYZ						147 scalePivotZ					159 transMinusRotatePivotZ
+	//	123 rotate					136 rotatePivot 				148 scalePivotTranslate 		160 minTransLimit 
+	//	124 rotateX					137 rotatePivotX				149 scalePivotTranslateX		161 minTransXLimit
+	//	125 rotateY					138 rotatePivotY				150 scalePivotTranslateY		162 minTransYLimit
+	//	126 rotateZ					139 rotatePivotZ				151 scalePivotTranslateZ		163 minTransZLimit
+	//	127 rotateOrder				140 rotatePivotTranslate 		152 rotateAxis 					164 maxTransLimit 
+	//	128 scale					141 rotatePivotTranslateX		153 rotateAxisX					165 maxTransXLimit
+	//	129 scaleX					142 rotatePivotTranslateY		154 rotateAxisY					166 maxTransYLimit
+	//	130 scaleY					143 rotatePivotTranslateZ		155 rotateAxisZ					167 maxTransZLimit
+	//	131 scaleZ
+
+	//	168 minTransLimitEnable		180 maxRotLimit					192 minScaleLimit				204 maxScaleLimitEnable 
+	//	169 minTransXLimitEnable	181 maxRotXLimit				193 minScaleXLimit				205 maxScaleXLimitEnable
+	//	170 minTransYLimitEnable	182 maxRotYLimit				194 minScaleYLimit				206 maxScaleYLimitEnable
+	//	171 minTransZLimitEnable	183 maxRotZLimit				195 minScaleZLimit				207 maxScaleZLimitEnable
+	//	172 maxTransLimitEnable 	184 minRotLimitEnable 			196 maxScaleLimit 
+	//	173 maxTransXLimitEnable	185 minRotXLimitEnable			197 maxScaleXLimit
+	//	174 maxTransYLimitEnable	186 minRotYLimitEnable			198 maxScaleYLimit
+	//	175 maxTransZLimitEnable	187 minRotZLimitEnable			199 maxScaleZLimit
+	//	176 minRotLimit 			188 maxRotLimitEnable 			200 minScaleLimitEnable 
+	//	177 minRotXLimit			189 maxRotXLimitEnable			201 minScaleXLimitEnable
+	//	178 minRotYLimit			190 maxRotYLimitEnable			202 minScaleYLimitEnable
+	//	179 minRotZLimit			191 maxRotZLimitEnable			203 minScaleZLimitEnable
+	
+	MPlug visibility {obj, node.attribute(50)};
+	plugs->append(visibility);
+	for (size_t i = 119; i <= 207; ++i)
+	{
+		MPlug plug{ obj, node.attribute(i) };
+		plugs->append(plug);
+	}
+
+	//	234 jointOrient					247 preferredAngle				259 maxRotateDampRange
+	//	235 jointOrientX				248 preferredAngleX				260 maxRotateDampRangeX
+	//	236 jointOrientY				249 preferredAngleY				261 maxRotateDampRangeY
+	//	237 jointOrientZ				250 preferredAngleZ				262 maxRotateDampRangeZ
+	//	238 segmentScaleCompensate		251 minRotateDampRange			263 maxRotateDampStrength
+	//	239 inverseScale				252 minRotateDampRangeX			264 maxRotateDampStrengthX
+	//	240 inverseScaleX				253 minRotateDampRangeY			265 maxRotateDampStrengthY
+	//	241 inverseScaleY				254 minRotateDampRangeZ			266 maxRotateDampStrengthZ
+	//	242 inverseScaleZ				255 minRotateDampStrength		
+	//	243 stiffness					256 minRotateDampStrengthX		304 radius
+	//	244 stiffnessX					257 minRotateDampStrengthY
+	//	245 stiffnessY					258 minRotateDampStrengthZ
+	//	246 stiffnessZ
+
+	for (size_t i = 234; i <= 266; ++i)
+	{
+		MPlug plug{ obj, node.attribute(i) };
+		plugs->append(plug);
+	}
+	MPlug radius{ obj, node.attribute(304) };
+	plugs->append(radius);
+
+	return plugs;
+}
+std::unique_ptr<MPlugArray> UIWindowController::getMatrixAttributePlugs(const MObject& const obj)
+{
+	const MFnDependencyNode node{ obj };
+	std::unique_ptr<MPlugArray> plugs{new MPlugArray};
+	if (retainRootPos &&
+		(Source_Input->text().toStdString().c_str() == node.name() ||
+			Target_Input->text().toStdString().c_str() == node.name()))
+	{
+		return plugs;
+	}
+
+	//44 matrix
+	//45 inverseMatrix
+	//46 worldMatrix
+	//47 worldInverseMatrix
+	//48 parentMatrix
+	//49 parentInverseMatrix
+
+	for (size_t i = 44; i <= 49; ++i)
+	{
+		MPlug plug {obj, node.attribute(i)};
+		plugs->append(plug);
+	}
+	return plugs;
+}
+std::unique_ptr<MPlugArray> UIWindowController::getBindAttributePlugs(const MObject& const obj)
+{
+	const MFnDependencyNode node{ obj };
+	std::unique_ptr<MPlugArray> plugs{new MPlugArray};
+	if (retainRootPos &&
+		(Source_Input->text().toStdString().c_str() == node.name() ||
+			Target_Input->text().toStdString().c_str() == node.name()))
+	{
+		return plugs;
+	}
+
+	//  267 bindPose				276 bindRotateAxis		284 bindInverseScale
+	//  268 bindRotation			277 bindRotateAxisX		285 bindInverseScaleX
+	//  269 bindRotationX			278 bindRotateAxisY		286 bindInverseScaleY
+	//  270 bindRotationY			279 bindRotateAxisZ		287 bindInverseScaleZ
+	//  271 bindRotationZ			280 bindScale			288 bindSegmentScaleCompensate
+	//  272 bindJointOrient			281 bindScaleX								
+	//  273 bindJointOrientX		282 bindScaleY								
+	//  274 bindJointOrientY		283 bindScaleZ				
+	//  275 bindJointOrientZ							
+	
+	
+	MString debug {};
+	for (size_t i = 267; i <= 288; ++i)
+	{
+		MPlug plug {obj, node.attribute(i)};
+		plugs->append(plug);
+	}
+	return plugs;
+}
+//MStatus UIWindowController::setMatrix(MPlug& targetPlug, MPlug& sourcePlug)
+//{
+//	MStatus res {};
+//	MGlobal::displayInfo(QString::number(sourcePlug.isNull()).toStdString().c_str());
+//	MGlobal::displayInfo(sourcePlug.asMObject().apiTypeStr());
+//	MGlobal::displayInfo("1");
+//	MDataHandle targetDH{};
+//	MGlobal::displayInfo("2");
+//	MDataHandle sourceDH{};
+//	MGlobal::displayInfo("3");
+//	sourcePlug.getValue(sourceDH);
+//	MGlobal::displayInfo("4");
+//	MMatrix mat{ sourceDH.asMatrix() };
+//	MGlobal::displayInfo("5");
+//	
+//	//targetDH.setMMatrix(mat);
+//	//MGlobal::displayInfo("6");
+//	//targetPlug.setValue(targetDH);
+//	//MGlobal::displayInfo("7");
+//	return MStatus::kSuccess;
+//}
+MStatus UIWindowController::setKeyframes(MPlug& const targetPlug, const MPlug& const sourcePlug)
+{
+	MStatus res {MStatus::kFailure};
+	MFnAnimCurve targetAnimCurve{ targetPlug };
+	MFnAnimCurve sourceAnimCurve{ sourcePlug };
+	if (sourceAnimCurve.object().apiType() != MFn::kInvalid)
+	{
+		res = MStatus::kSuccess;
+		if (targetAnimCurve.object().apiType() == MFn::kInvalid) targetAnimCurve.create(targetPlug);
+
+		UINT tNumKeys{ targetAnimCurve.numKeys() };
+		UINT sNumKeys{ sourceAnimCurve.numKeys() };
+		
+		if (MAnimUtil::isAnimated(targetPlug))
+		{
+			for (size_t i = 1; i < tNumKeys; ++i)
+			{
+				res = targetAnimCurve.remove(i);
+			}
+		}
+		for (size_t i = 0; i < sNumKeys; ++i)
+		{
+			MTime time{ sourceAnimCurve.time(i) };
+			double sourceValue{ sourceAnimCurve.value(i) };
+			targetAnimCurve.addKeyframe(time, sourceValue);
+		}
+	}
+	return res;
+}
+//MStatus UIWindowController::bindMatrixTransfer(MPlugArray& targetPlugs, MPlugArray& sourcePlugs) {
+//	MGlobal::displayInfo(MString(QString::number(sourcePlugs.length()).toStdString().c_str()));
+//	setMatrix(targetPlugs[0], sourcePlugs[0]);
+//	//for (size_t i = 1; i < sourcePlugs.length(); ++i)
+//	//{
+//	//	setKeyframes(targetPlugs[i], sourcePlugs[i]);
+//	//}
+//	return MStatus::kSuccess;
+//}
+//MStatus UIWindowController::matrixTransfer(const MPlugArray& const targetPlugs, const MPlugArray& const sourcePlugs) {
+//	for (size_t i = 0; i < sourcePlugs.length(); ++i)
+//	{
+//		MDataHandle targetDH {targetPlugs[i].asMDataHandle()};
+//		MDataHandle sourceDH {sourcePlugs[i].asMDataHandle()};
+//		MMatrix mat {sourceDH.asMatrix()};
+//		targetDH.setMMatrix(mat);
+//	}
+//	return MStatus::kSuccess;
+//}
+//MStatus UIWindowController::plugTransfer(const MPlugArray& const targetPlugs, const MPlugArray& const sourcePlugs)
+//{
+//	MStatus res{};
+//	for (size_t i = 0; i < sourcePlugs.length(); ++i)
+//	{
+//		setKeyframes(targetPlugs[i], sourcePlugs[i]);
+//	}
+//	return MStatus::kSuccess;
+//}
+
+MStatus UIWindowController::transferPlugArray(MArrayDataHandle& const targetArrayHandle, MArrayDataHandle& const sourceArrayHandle) {
+	MStatus res {};
+	MGlobal::displayInfo(QString::number(targetArrayHandle.elementCount()).toStdString().c_str());
+	MGlobal::displayInfo(QString::number(sourceArrayHandle.elementCount()).toStdString().c_str());
+	for (size_t i = 0; i < sourceArrayHandle.elementCount(); ++i)
+	{
+		targetArrayHandle.jumpToArrayElement(i);
+		sourceArrayHandle.jumpToArrayElement(i);
+		MDataHandle targetDH {targetArrayHandle.outputValue(&res)};
+		MDataHandle sourceDH {sourceArrayHandle.outputValue(&res)};
+		if (sourceDH.data().apiType() == MFn::kMatrixData)
+		{
+			//MFnMatrixData targetData {targetDH.data()};
+			MFnMatrixData sourceData {sourceDH.data()};
+			MMatrix sourceMatrix {sourceMatrix.identity};
+			MMatrix targetMatrix {targetDH.asMatrix()};
+			sourceMatrix = sourceData.matrix();
+			targetMatrix = sourceMatrix;
+			//*targetMatrix = sourceMatrix;
+			//targetData.set(mat);
+			//targetDH.setMMatrix(mat);
+			
+		}
+	}
+
+	return MStatus::kSuccess;
+}
+MStatus UIWindowController::transferMatrix(MPlug& const targetPlug, const MPlug& const sourcePlug)
+{
+	MString debug {};
+	MObject targetMatObj{};
+	MObject sourceMatObj {};
+	targetPlug.getValue(targetMatObj);
+	sourcePlug.getValue(sourceMatObj);
+	MFnMatrixData targetData {targetMatObj};
+	MFnMatrixData sourceData {sourceMatObj};
+	MMatrix mat {mat.identity};
+	mat = sourceData.matrix();
+	targetData.set(mat);
+	targetPlug.setValue(targetMatObj);
+	return MStatus::kSuccess;
+}
+MStatus UIWindowController::transferDouble3(MPlug& const targetPlug, const MPlug& const sourcePlug) {
+	MGlobal::displayInfo(targetPlug.name());
+	MGlobal::displayInfo(sourcePlug.name());
+	
+	MDataHandle targetDH {targetPlug.asMDataHandle()};
+	MDataHandle sourceDH {sourcePlug.asMDataHandle()};
+	double3& arr {sourceDH.asDouble3()};
+	targetDH.set3Double(arr[0], arr[1], arr[2]);
+	targetPlug.setMDataHandle(targetDH);
+	return MStatus::kSuccess;
+}
+MStatus UIWindowController::transferPlugs(MPlugArray& const targetPlugs, MPlugArray& const sourcePlugs) {
+	
+	for (size_t i = 0; i < sourcePlugs.length(); ++i)
+	{
+		//MGlobal::viewFrame(MAnimControl::minTime());
+		//MGlobal::displayInfo(sourcePlugs[i].name());
+		//MGlobal::displayInfo(sourcePlugs[i].asMObject().apiTypeStr());
+		//MGlobal::displayInfo(sourcePlugs[i].attribute().apiTypeStr());
+		switch (sourcePlugs[i].attribute().apiType()) 
+		{
+		case MFn::kAttribute3Double:
+			if (sourcePlugs[i].asMObject().apiType() == MFn::kData3Double)
+			{
+				// This isn't really necessary since kDoubleLinearAttribute accesses these
+				// 3 values individually and sets the value every keyframe.
+				transferDouble3(targetPlugs[i], sourcePlugs[i]);
+			}
+			break;
+		case MFn::kTypedAttribute:
+			if (sourcePlugs[i].asMObject().apiType() == MFn::kMatrixData)
+			{
+				transferMatrix(targetPlugs[i], sourcePlugs[i]);
+			}
+			else if (sourcePlugs[i].isArray())
+			{
+				//DATA HANDLE
+				targetPlugs[i].setNumElements(sourcePlugs[i].numElements());
+				UINT numElements {sourcePlugs[i].numElements()};
+				MArrayDataHandle targetHandle {targetPlugs[i].asMDataHandle()};
+				MArrayDataHandle sourceHandle {sourcePlugs[i].asMDataHandle()};
+				transferPlugArray(targetHandle, sourceHandle);
+			
+				////PLUG
+				//for (size_t j = 0; j < sourcePlugs[i].numElements(); ++j)
+				//{
+				//	if (sourcePlugs[i].elementByLogicalIndex(j).asMObject().apiType() == MFn::kMatrixData)
+				//	{	
+				//		MPlug tChildPlug {targetPlugs[i].elementByLogicalIndex(j)};
+				//		MPlug sChildPlug {sourcePlugs[i].elementByLogicalIndex(j)};
+				//		transferMatrix(tChildPlug, sChildPlug);
+				//	}
+				//
+				//	// TODO: See if there's any more attributes for kTypedAttribute that isn't Matrices.
+				//}
+			}
+			break;
+		case MFn::kDoubleLinearAttribute:
+		case MFn::kDoubleAngleAttribute:
+		case MFn::kEnumAttribute:
+		case MFn::kNumericAttribute:
+			setKeyframes(targetPlugs[i], sourcePlugs[i]);
+			break;
+		}
+	}
+	return MStatus::kSuccess;
+}
+
+MStatus UIWindowController::jointTransfer(const MObject& const targetObject, const MObject& const sourceObject) {
+	MStatus res {};
+	// TODO: - Clean this part more gracefully. carefull about scope.
+	//		 - Add Skin Binding
+	//// BindPose
+	std::unique_ptr<MPlugArray> targetPlugs {getBindAttributePlugs(targetObject)};
+	std::unique_ptr<MPlugArray> sourcePlugs {getBindAttributePlugs(sourceObject)};
+	res = transferPlugs(*targetPlugs.get(), *sourcePlugs.get());
+	if (MFAIL(res)) return res;
+	////// <---- Skin
+	////// <---- delete plug ptrs
+
+	targetPlugs.reset();
+	sourcePlugs.reset();
+	targetPlugs = getMatrixAttributePlugs(targetObject);
+	sourcePlugs = getMatrixAttributePlugs(sourceObject);
+	res = transferPlugs(*targetPlugs.get(), *sourcePlugs.get());
+	if (MFAIL(res)) return res;
+
+	targetPlugs.reset();
+	sourcePlugs.reset();
+	targetPlugs = getJointAttributePlugs(targetObject);
+	sourcePlugs = getJointAttributePlugs(sourceObject);
+	res = transferPlugs(*targetPlugs.get(), *sourcePlugs.get());
+	if (MFAIL(res)) return res;
+	return MStatus::kSuccess;
+}
+void UIWindowController::transferAnimation() {
+	if (!(!Target_Input->text().isEmpty() && !Source_Input->text().isEmpty())) {
+		MGlobal::displayInfo("No joints selected for transfer!");
+		return;
+	}
+	MGlobal::clearSelectionList();
+	if (!MGlobal::selectByName(Target_Input->text().toStdString().c_str())) {
+		MGlobal::displayInfo("Error: Unable to fetch target joint. Non existant?");
+		return;
+	}
+	if (!MGlobal::selectByName(Source_Input->text().toStdString().c_str())) {
+		MGlobal::displayInfo("Error: Unable to fetch source joint. Non existant?");
+		return;
+	}
+
+	MSelectionList selection{};
+	MGlobal::getActiveSelectionList(selection);
+	MObject targetObject{};
+	MObject sourceObject{};
+	selection.getDependNode(0, targetObject);
+	selection.getDependNode(1, sourceObject);
+	jointTransfer(targetObject, sourceObject);
+	
+	UINT listCount {};
+	if (Target_List->count() < Source_List->count()) listCount = Target_List->count();
+	else listCount = Source_List->count();
+	MGlobal::displayInfo(QString::number(listCount).toStdString().c_str());
+	for (size_t i = 0; i < listCount; ++i)
+	{
+		MGlobal::displayInfo(QString::number(i).toStdString().c_str());
+		Target_List->setCurrentRow(i);
+		Source_List->setCurrentRow(i);
+		MGlobal::clearSelectionList();
+		if (!MGlobal::selectByName(Target_List->currentItem()->text().toStdString().c_str())) {
+			MGlobal::displayInfo("Error: Unable to fetch target joint. Non existant?");
+			return;
+		}
+		if (!MGlobal::selectByName(Source_List->currentItem()->text().toStdString().c_str())) {
+			MGlobal::displayInfo("Error: Unable to fetch source joint. Non existant?");
+			return;
+		}
+		MGlobal::getActiveSelectionList(selection);
+		MObject targetChildObject {};
+		MObject sourceChildObject {};
+		selection.getDependNode(0, targetChildObject);
+		selection.getDependNode(1, sourceChildObject);
+		jointTransfer(targetChildObject, sourceChildObject);
+	}
+
+
+	//MFnDependencyNode targetNode {targetObject};
+	//for (size_t i = 0; i < targetNode.attributeCount(); ++i)
+	//{
+	//	MFnAttribute attr {targetNode.attribute(i)};
+	//	MGlobal::displayInfo(MString(QString::number(i).toStdString().c_str()) + MString(" ") + attr.name());
+	//}
 }
 
 void UIWindowController::targetFromCheck()
