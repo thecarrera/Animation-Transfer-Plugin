@@ -40,7 +40,6 @@
 
 	####################################
 	####							####
-	####							####
 	####	Print Shelves in MEL	####
 	####							####
 	####################################
@@ -53,7 +52,6 @@
 	}
 
 	############################################
-	####									####
 	####									####
 	####	Return value from MEL to C++	####
 	####									####
@@ -70,3 +68,191 @@
 	MCommandResult result {};
 	MGlobal::executeCommand(command, result);
 	MGlobal::displayInfo(result.stringResult());
+
+	############################################
+	####									####
+	####	Group attributes into bundle	####
+	####	NOTE: Not working properly		####
+	####									####
+	############################################
+
+	MObject getAttributeList(MFnDependencyNode& node)
+	{
+		MFnCompoundAttribute list{};
+		MStatus res{};
+		list.create("Attribute List", "attrList", &res);
+		MGlobal::displayInfo(res.errorString());
+		res = list.setArray(true);
+		MGlobal::displayInfo(res.errorString());
+		res = list.addChild(node.attribute(50));  // visibility
+		MGlobal::displayInfo(res.errorString());
+		res = list.addChild(node.attribute(120)); // translateX
+		MGlobal::displayInfo(res.errorString());
+		res = list.addChild(node.attribute(121)); // translateY
+		MGlobal::displayInfo(res.errorString());
+		res = list.addChild(node.attribute(122)); // translateZ
+		MGlobal::displayInfo(res.errorString());
+		res = list.addChild(node.attribute(124)); // rotateX
+		MGlobal::displayInfo(res.errorString());
+		res = list.addChild(node.attribute(125)); // rotateY
+		MGlobal::displayInfo(res.errorString());
+		res = list.addChild(node.attribute(126)); // rotateZ
+		MGlobal::displayInfo(res.errorString());
+		res = list.addChild(node.attribute(127)); // Rotate Order
+		MGlobal::displayInfo(res.errorString());
+		res = list.addChild(node.attribute(129)); // translateX
+		MGlobal::displayInfo(res.errorString());
+		res = list.addChild(node.attribute(130)); // translateX
+		MGlobal::displayInfo(res.errorString());
+		res = list.addChild(node.attribute(131)); // translateX
+		MGlobal::displayInfo(res.errorString());
+	
+		return list.object();
+	}
+
+
+	############################################
+	####									####
+	####	Print out different node types	####
+	####	NOTE: Not working properly		####
+	####									####
+	############################################
+
+
+MString debug{};
+
+//MMatrix
+MPlug matrix{ obj, node.attribute(44) };		
+debug = matrix.attribute().apiTypeStr();
+MGlobal::displayInfo(MString("(matrix): \t\t") + MString(matrix.asMObject().apiTypeStr()) + MString("\t\t") + debug);
+
+//PlugArray arr -> Plug = arr.elementByLogicalIndex(arr.numElements()) -> MMatrix
+MPlug matrixArr{ obj, node.attribute(46) };
+debug = matrixArr.attribute().apiTypeStr();
+MGlobal::displayInfo(MString("(matrixArr): \t\t") + MString(matrixArr.asMObject().apiTypeStr()) + MString("\t\t\t") + debug);
+
+//Bool
+MPlug vis {obj, node.attribute(50)};
+debug = vis.attribute().apiTypeStr();
+MGlobal::displayInfo(MString("(bool): \t\t\t") + MString(vis.asMObject().apiTypeStr()) + MString("\t\t") + debug);
+
+//PlugArray (double3) -> double3[0] => plug (double transX)
+MPlug transPlugArr{ obj, node.attribute(119) };
+debug = transPlugArr.attribute().apiTypeStr();
+MGlobal::displayInfo(MString("(double arr): \t") + MString(transPlugArr.asMObject().apiTypeStr()) + MString("\t") + debug);
+
+//double
+MPlug transX{ obj, node.attribute(120) };
+debug = transX.attribute().apiTypeStr();
+MGlobal::displayInfo(MString("(double): \t\t") + MString(transX.asMObject().apiTypeStr()) + MString("\t\t") + debug);
+
+//Enum (MTransformationMatrix::RotationOrder) // short
+MPlug rotateOrder{ obj, node.attribute(127) };
+debug = rotateOrder.attribute().apiTypeStr();
+MGlobal::displayInfo(MString("(Enum): \t\t\t") + MString(rotateOrder.asMObject().apiTypeStr()) + MString("\t\t") + debug);
+
+//MMatrix -> does not exist until skin is made.
+MPlug nonMat{ obj, node.attribute(267) };
+debug = nonMat.attribute().apiTypeStr();
+MGlobal::displayInfo(MString("(non mat): \t\t") + MString(nonMat.asMObject().apiTypeStr()) + MString("\t\t") + debug);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		//for (size_t i = 0; i < sourcePlugs.length(); ++i)
+	//{
+	//	MPlugArray targetInputs{};
+	//	MPlugArray targetAnimCurves{};
+	//	MPlugArray sourceInputs{};
+	//	targetPlugs[i].connectedTo(targetInputs, true, false);
+	//	sourcePlugs[i].connectedTo(sourceInputs, true, false);
+	//
+	//	for (size_t j = 0; j < targetInputs.length(); ++j)
+	//	{
+	//
+	//		MGlobal::displayInfo(targetInputs[i].asMDataHandle().type);
+	//		//MObject connection {targetInputs[i].node()};
+	//		//if (connection.hasFn(MFn::kAnimCurve))
+	//		//{
+	//		//	MFnAnimCurve animCurve {connection};
+	//		//	for (size_t k = 0; k < animCurve.numKeys(); ++k)
+	//		//	{
+	//		//		//animCurve.remove(k);
+	//		//	}
+	//		//	//targetAnimCurves.append(targetInputs[i]);
+	//		//}
+	//	}
+	//	MGlobal::displayInfo(QString::number(targetAnimCurves.length()).toStdString().c_str());
+	//}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		MGlobal::displayInfo("target mat after change:");
+	debug = "\t";
+	debug += targetData.matrix()[0][0];
+	debug += " ";
+	debug += targetData.matrix()[0][1];
+	debug += " ";
+	debug += targetData.matrix()[0][2];
+	debug += " ";
+	debug += targetData.matrix()[0][3];
+	debug += "\n\t";
+	debug += targetData.matrix()[1][0];
+	debug += " ";
+	debug += targetData.matrix()[1][1];
+	debug += " ";
+	debug += targetData.matrix()[1][2];
+	debug += " ";
+	debug += targetData.matrix()[1][3];
+	debug += "\n\t";
+	debug += targetData.matrix()[2][0];
+	debug += " ";
+	debug += targetData.matrix()[2][1];
+	debug += " ";
+	debug += targetData.matrix()[2][2];
+	debug += " ";
+	debug += targetData.matrix()[2][3];
+	debug += "\n\t";
+	debug += targetData.matrix()[3][0];
+	debug += " ";
+	debug += targetData.matrix()[3][1];
+	debug += " ";
+	debug += targetData.matrix()[3][2];
+	debug += " ";
+	debug += targetData.matrix()[3][3];
+	debug += "\n\t";
+	MGlobal::displayInfo(debug);
